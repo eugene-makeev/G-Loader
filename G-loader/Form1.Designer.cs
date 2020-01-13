@@ -33,6 +33,7 @@
             this.GcodeLoad = new System.Windows.Forms.Button();
             this.FwLoad = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
+            this.Status = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // Connect
@@ -84,11 +85,21 @@
             this.label1.TabIndex = 4;
             this.label1.Text = "Порт:";
             // 
+            // Status
+            // 
+            this.Status.AutoSize = true;
+            this.Status.Location = new System.Drawing.Point(14, 214);
+            this.Status.Name = "Status";
+            this.Status.Size = new System.Drawing.Size(57, 13);
+            this.Status.TabIndex = 5;
+            this.Status.Text = "Отключен";
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(291, 211);
+            this.ClientSize = new System.Drawing.Size(291, 243);
+            this.Controls.Add(this.Status);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.FwLoad);
             this.Controls.Add(this.GcodeLoad);
@@ -109,6 +120,7 @@
         private System.Windows.Forms.Button GcodeLoad;
         private System.Windows.Forms.Button FwLoad;
         private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Label Status;
     }
 }
 

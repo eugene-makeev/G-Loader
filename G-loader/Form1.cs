@@ -5,6 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO.Ports;
@@ -14,6 +15,8 @@ namespace G_loader
     public partial class Form1 : Form
     {
         SerialPort port = new SerialPort();
+        string filename;
+        string fileText;
 
         public Form1()
         {
@@ -52,6 +55,7 @@ namespace G_loader
                     Connect.Text = "Отключить";
                     comboBox1.Enabled = false;
                     FwLoad.Enabled = GcodeLoad.Enabled = true;
+                    Status.Text = "Подключен";
                 }
                 catch
                 {
@@ -67,34 +71,64 @@ namespace G_loader
                 comboBox1.Enabled = true;
                 FwLoad.Enabled = GcodeLoad.Enabled = false;
                 port.Close();
+                Status.Text = "Отключен";
             }
+        }
+
+        private void SendFileThread()
+        {
+            Status.Text = "Отправка 0%";
+            int fileLength = fileText.Length;
+            int blockSize = 128;
+            int percentsOfBlock = fileLength / blockSize;
+            while (fileLength != 0)
+            {
+                fileLength--;
+                Status.Text = "Отправка %";
+            }
+        }
+
+        private void ResponseThread()
+        {
+
+        }
+
+        private DialogResult openAndSendFile(string filter)
+        {
+            OpenFileDialog openDialog = new OpenFileDialog();
+            openDialog.Filter = filter;
+
+            DialogResult result = openDialog.ShowDialog();
+
+            if (result != DialogResult.Cancel)
+            {
+                filename = openDialog.FileName;
+                fileText = System.IO.File.ReadAllText(filename);
+
+                // send file over COM port
+                Thread t = new Thread(new ThreadStart(SendFileThread));
+                t.Start();
+                t.Join();
+            }
+
+            return result;
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            OpenFileDialog openDialog = new OpenFileDialog();
-            openDialog.Filter = "All files(*.*)|*.*";
-            if (openDialog.ShowDialog() != DialogResult.Cancel)
+            if (openAndSendFile("All files(*.*)|*.*") != DialogResult.Cancel)
             {
-                string filename = openDialog.FileName;
-                string fileText = System.IO.File.ReadAllText(filename);
 
-                // send file over COM port
             }
-
         }
 
         private void button3_Click(object sender, EventArgs e)
         {
-            OpenFileDialog openDialog = new OpenFileDialog();
-            openDialog.Filter = "Bin files(*.bin)|*.bin";
-            if (openDialog.ShowDialog() != DialogResult.Cancel)
+            if (openAndSendFile("Bin files(*.bin)|*.bin") != DialogResult.Cancel)
             {
-                string filename = openDialog.FileName;
-                string fileText = System.IO.File.ReadAllText(filename);
 
-                // send file over COM port
             }
         }
+
     }
 }
