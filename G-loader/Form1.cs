@@ -27,6 +27,11 @@ namespace G_loader
         {
             // populate list of com-ports
             string[] enableComPorts = SerialPort.GetPortNames();
+            if (enableComPorts.Length != 0)
+            {
+                comboBox1.Items.Add("Autodetect");
+            }
+
             foreach (string port in enableComPorts)
             {
                 comboBox1.Items.Add(port);
@@ -42,37 +47,63 @@ namespace G_loader
         {
             if (Connect.Text == "Подключить")
             {
-                port.PortName = comboBox1.GetItemText(comboBox1.SelectedItem);
-                port.BaudRate = 115200;
-                port.Parity = Parity.None;
-                port.StopBits = StopBits.One;
-                port.DataBits = 8;
-                port.Handshake = Handshake.None;
-                port.RtsEnable = false;
-                try
+                for (int selection = 1; selection < comboBox1.Items.Count; selection++)
                 {
-                    port.Open();
-                    Connect.Text = "Отключить";
+                    Status.Text = "Подключение ...";
                     comboBox1.Enabled = false;
-                    FwLoad.Enabled = GcodeLoad.Enabled = true;
-                    Status.Text = "Подключен";
-                }
-                catch
-                {
-                    string message = "Порт уже используется другой программой";
-                    string title = "Ошибка подключения";
-                    MessageBoxButtons buttons = MessageBoxButtons.OK;
-                    MessageBox.Show(message, title, buttons, MessageBoxIcon.Warning);
+
+                    comboBox1.SelectedIndex = selection;
+                    port.PortName = comboBox1.GetItemText(comboBox1.SelectedItem);
+                    port.BaudRate = 115200;
+                    port.StopBits = StopBits.One;
+                    port.DataBits = 8;
+                    port.ReadTimeout = 500;
+                    port.NewLine = "]";
+
+                    try
+                    {
+                        port.Open();
+
+                        try
+                        {
+                            port.Write("[I]");
+                            string response = port.ReadLine();
+                            if (response.Contains("MyGrbl"))
+                            {
+                                break;
+                            }
+
+                            port.Close();
+                        }
+                        catch
+                        {
+                            //string message = "Устройство не опознано, выберите другой порт";
+                            //string title = "Ошибка подключения";
+                            //MessageBoxButtons buttons = MessageBoxButtons.OK;
+                            //MessageBox.Show(message, title, buttons, MessageBoxIcon.Warning);
+
+                            port.Close();
+                        }
+                    }
+                    catch
+                    {
+                        string message = "Порт уже используется другой программой";
+                        string title = "Ошибка подключения";
+                        MessageBoxButtons buttons = MessageBoxButtons.OK;
+                        MessageBox.Show(message, title, buttons, MessageBoxIcon.Warning);
+                    }
                 }
             }
             else
             {
-                Connect.Text = "Подключить";
-                comboBox1.Enabled = true;
-                FwLoad.Enabled = GcodeLoad.Enabled = false;
                 port.Close();
-                Status.Text = "Отключен";
             }
+
+            Connect.Text = port.IsOpen ? "Отключить" : "Подключить";
+            Status.Text = port.IsOpen ? "Подключен" : "Отключен";
+            FwLoad.Enabled = GcodeLoad.Enabled = port.IsOpen;
+            comboBox1.SelectedIndex = port.IsOpen ? comboBox1.SelectedIndex : 0;
+            comboBox1.Enabled = !port.IsOpen;
         }
 
         private void SendFileThread()
