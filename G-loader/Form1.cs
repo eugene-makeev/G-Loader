@@ -212,7 +212,7 @@ namespace G_loader
                     byte[] crc16 = BitConverter.GetBytes(CRC.CRC16(payload, payload.Length));
                     byte[] packet = length.Take(1).Concat(payload).Concat(crc16).ToArray();
 
-                    port.Write(packet, offset, packet.Length);
+                    port.Write(packet, 0, packet.Length);
 
                     byte[] crc = new byte[payload.Length + 2];
                     port.Read(crc, 0, payload.Length + 2);
@@ -232,7 +232,7 @@ namespace G_loader
 
                 offset += bytesToSend;
                 int percents = (offset / fileLength) * 100;
-                Status.Text = "Отправка " + percents.ToString() + "%";
+                //Status.Text = "Отправка " + percents.ToString() + "%";
             }
         }
 
