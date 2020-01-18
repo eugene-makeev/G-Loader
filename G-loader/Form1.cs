@@ -1,15 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.IO.Ports;
 using System.IO;
+using System.IO.Ports;
+using System.Linq;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace G_loader
 {
@@ -17,7 +11,9 @@ namespace G_loader
     {
         SerialPort port = new SerialPort();
         string filename;
-        string fileText;
+        int percents = 0;
+        UInt16 startAddress = 0;
+        UInt16 maxFileSize = 0;
 
         public Form1()
         {
@@ -140,60 +136,86 @@ namespace G_loader
             byte[] fileData = File.ReadAllBytes(filename);
             UInt16 pageSize = 128;
             int fileLength = fileData.Length;
+            UInt16 start = startAddress;
 
-            if (fileLength > 28 * 1024)
+            byte errorCode = 0;
+
+            if (fileLength > maxFileSize)
             {
-                string message = "Размер файла превышает допустимый (28 Кб)";
+                errorCode = 1;
+            }
+            else
+            {
+                for (UInt16 offset = 0; offset < fileLength;)
+                {
+                    UInt16 remainingBytes = (UInt16)(fileLength - offset);
+                    UInt16 bytesToSend = remainingBytes > pageSize ? pageSize : remainingBytes;
+                    byte retries = 0;
+
+                    try
+                    {
+                        port.Write("[P]");
+                        Thread.Sleep(5);
+                        // need synchronisation here?
+                        byte[] length = BitConverter.GetBytes(bytesToSend + sizeof(UInt16));
+                        byte[] address = BitConverter.GetBytes(start + offset);
+                        byte[] data = fileData.Skip(offset).Take(bytesToSend).ToArray();
+                        byte[] payload = address.Take(2).Concat(data).ToArray();
+                        byte[] crc16 = BitConverter.GetBytes(CRC.CRC16(payload, payload.Length));
+                        byte[] packet = length.Take(1).Concat(payload).Concat(crc16).ToArray();
+
+                        port.Write(packet, 0, packet.Length);
+
+                        byte[] crc = new byte[payload.Length + 2];
+                        port.Read(crc, 0, payload.Length + 2);
+                        string response = port.ReadLine();
+                        if (response.Contains("nak"))
+                        {
+                            //Status.Text = response;
+                            if (++retries > 5)
+                            {
+                                errorCode = 2;
+                                break;
+                            }
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        errorCode = 3;
+                        break;
+                    }
+
+                    offset += bytesToSend;
+                    percents = (offset / fileLength) * 100;
+
+                    //this.Status.Invoke((MethodInvoker)delegate {
+                    //    Status.Text = "Отправка " + percents.ToString() + "%";
+                    //});
+                }
+            }
+           
+            if (errorCode != 0)
+            {
+                string message;
+
+                switch (errorCode)
+                {
+                    case 1:
+                        message = "Размер файла превышает максимально допустимый: " + (maxFileSize / 1024).ToString() + "кБ";
+                        break;
+                    case 2:
+                        message = "Достигнуто максимальное количество повторений при передаче данных";
+                        break;
+                    default:
+                        message = "Непредвиденная ошибка, перезапустите устройство и программу";
+                        break;
+                }
+
                 string title = "Ошибка обновления";
                 MessageBoxButtons buttons = MessageBoxButtons.OK;
                 MessageBox.Show(message, title, buttons, MessageBoxIcon.Warning);
-                return;
             }
-           
-            for (UInt16 offset = 0; offset < fileLength; )
-            {
-                UInt16 remainingBytes = (UInt16)(fileLength - offset);
-                UInt16 bytesToSend = remainingBytes > pageSize ? pageSize : remainingBytes;
-                
-                try
-                { 
-                    port.Write("[P]");
-                    Thread.Sleep(5);
-                    // need synchronisation here?
-                    byte[] length = BitConverter.GetBytes(bytesToSend + sizeof(UInt16));
-                    byte[] address = BitConverter.GetBytes(offset);
-                    byte[] data = fileData.Skip(offset).Take(bytesToSend).ToArray();
-                    byte[] payload = address.Concat(data).ToArray();
-                    byte[] crc16 = BitConverter.GetBytes(CRC.CRC16(payload, payload.Length));
-                    byte[] packet = length.Take(1).Concat(payload).Concat(crc16).ToArray();
-
-                    port.Write(packet, 0, packet.Length);
-
-                    byte[] crc = new byte[payload.Length + 2];
-                    port.Read(crc, 0, payload.Length + 2);
-                    string response = port.ReadLine();
-                    if (response.Contains("nak"))
-                    {
-                        //Status.Text = response;
-                        //continue;
-                        break;
-                    }
-                }
-                catch
-                {
-                    //Status.Text += " Exception";
-                    break;
-                }
-
-                offset += bytesToSend;
-                int percents = (offset / fileLength) * 100;
-                //Status.Text = "Отправка " + percents.ToString() + "%";
-            }
-        }
-
-        private void ResponseThread()
-        {
-
         }
 
         private DialogResult openAndSendFile(string filter)
@@ -218,6 +240,8 @@ namespace G_loader
 
         private void button2_Click(object sender, EventArgs e)
         {
+            startAddress = 0x6800;
+            maxFileSize = 2 * 1024;
             if (openAndSendFile("All files(*.*)|*.*") != DialogResult.Cancel)
             {
 
@@ -226,12 +250,26 @@ namespace G_loader
 
         private void button3_Click(object sender, EventArgs e)
         {
+            startAddress = 0;
+            maxFileSize = 28 * 1024;
             if (openAndSendFile("Bin files(*.bin)|*.bin") != DialogResult.Cancel)
             {
 
             }
         }
 
+        private void comboBox1_DropDown(object sender, EventArgs e)
+        {
+            comboBox1.Items.Clear();
+            comboBox1.Items.Add("Autodetect");
+            comboBox1.SelectedIndex = 0;
+            // populate list of com-ports
+            string[] enableComPorts = SerialPort.GetPortNames();
+            foreach (string port in enableComPorts)
+            {
+                comboBox1.Items.Add(port);
+            }
+        }
     }
 
     public static class CRC
