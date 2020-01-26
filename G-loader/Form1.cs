@@ -27,6 +27,7 @@ namespace G_loader
             port.StopBits = StopBits.One;
             port.DataBits = 8;
             port.ReadTimeout = 500;
+            port.WriteTimeout = 50;
             port.NewLine = "]";
 
             comboBox1.Items.Add("Autodetect");
@@ -44,7 +45,7 @@ namespace G_loader
         {
             if (port.IsOpen)
             {
-                port.Write("[R]");
+                portWrite("[R]");
                 port.Close();
             }
         }
@@ -52,28 +53,68 @@ namespace G_loader
         private bool portOpen(string portName)
         {
             port.PortName = portName;
+            byte retry = 3;
 
             try
             {
                 port.Open();
-                port.Write("[I]");
-                string response = port.ReadLine();
 
-                if (!response.Contains("MyGrbl"))
+                while (retry !=0)
                 {
-                    port.Close();
+                    portWrite("[I]");
+                    string response = port.ReadLine();
+
+                    if (response.Contains("MyGrbl"))
+                    {
+                        return port.IsOpen;
+                    }
+
+                    retry--;
                 }
+
+                port.Close();
             }
             catch
             {
-                if (port.IsOpen)
-                {
-                    port.Write("[R]");
-                    port.Close();
-                }
+                portWrite("[R]");
+                port.Close();
             }
 
             return port.IsOpen;
+        }
+
+        private int portWrite(string str)
+        {
+            if (port.IsOpen)
+            {
+                try
+                {
+                    port.Write(str);
+                }
+                catch
+                {
+                    return 1;
+                }
+            }
+
+            return 0;
+        }
+
+        private int portWrite(byte[] data)
+        {
+            if (port.IsOpen)
+            {
+                try
+                {
+                    port.Write(data, 0, data.Length);
+                }
+                catch
+                {
+                    return 1;
+                }
+            }
+
+            return 0;
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -120,7 +161,7 @@ namespace G_loader
             }
             else
             {
-                port.Write("[R]");
+                portWrite("[R]");
                 port.Close();
             }
 
@@ -154,30 +195,29 @@ namespace G_loader
 
                     try
                     {
-                        port.Write("[P]");
-                        Thread.Sleep(5);
-                        // need synchronisation here?
-                        byte[] length = BitConverter.GetBytes(bytesToSend + sizeof(UInt16));
-                        byte[] address = BitConverter.GetBytes(start + offset);
-                        byte[] data = fileData.Skip(offset).Take(bytesToSend).ToArray();
-                        byte[] payload = address.Take(2).Concat(data).ToArray();
-                        byte[] crc16 = BitConverter.GetBytes(CRC.CRC16(payload, payload.Length));
-                        byte[] packet = length.Take(1).Concat(payload).Concat(crc16).ToArray();
-
-                        port.Write(packet, 0, packet.Length);
-
-                        byte[] crc = new byte[payload.Length + 2];
-                        port.Read(crc, 0, payload.Length + 2);
-                        string response = port.ReadLine();
-                        if (response.Contains("nak"))
+                        if (portWrite("[P]") == 0)
                         {
-                            //Status.Text = response;
-                            if (++retries > 5)
+                            Thread.Sleep(5);
+                            // need synchronisation here?
+                            byte[] length = BitConverter.GetBytes(bytesToSend + sizeof(UInt16));
+                            byte[] address = BitConverter.GetBytes(start + offset);
+                            byte[] data = fileData.Skip(offset).Take(bytesToSend).ToArray();
+                            byte[] payload = address.Take(2).Concat(data).ToArray();
+                            byte[] crc16 = BitConverter.GetBytes(CRC.CRC16(payload, payload.Length));
+                            byte[] packet = length.Take(1).Concat(payload).Concat(crc16).ToArray();
+
+                            if (portWrite(packet) == 0)
                             {
-                                errorCode = 2;
-                                break;
+                                if (port.ReadLine().Contains("nak"))
+                                {
+                                    if (++retries > 5)
+                                    {
+                                        errorCode = 2;
+                                        break;
+                                    }
+                                    continue;
+                                }
                             }
-                            continue;
                         }
                     }
                     catch
@@ -187,14 +227,16 @@ namespace G_loader
                     }
 
                     offset += bytesToSend;
-                    percents = (offset / fileLength) * 100;
+                    percents = (offset * 100 / fileLength);
 
-                    //this.Status.Invoke((MethodInvoker)delegate {
-                    //    Status.Text = "Отправка " + percents.ToString() + "%";
-                    //});
+                    Status.Invoke((Action)delegate 
+                    {
+                        Status.Text = "Отправка " + percents.ToString() + "%";
+                    });
                 }
+            
             }
-           
+
             if (errorCode != 0)
             {
                 string message;
@@ -216,6 +258,12 @@ namespace G_loader
                 MessageBoxButtons buttons = MessageBoxButtons.OK;
                 MessageBox.Show(message, title, buttons, MessageBoxIcon.Warning);
             }
+            else
+            {
+                string title = "Готово";
+                MessageBoxButtons buttons = MessageBoxButtons.OK;
+                MessageBox.Show("Загрузка файла завершена", title, buttons, MessageBoxIcon.Information);
+            }
         }
 
         private DialogResult openAndSendFile(string filter)
@@ -232,7 +280,13 @@ namespace G_loader
                 // send file over COM port
                 Thread t = new Thread(new ThreadStart(SendFileThread));
                 t.Start();
-                t.Join();
+
+                while (t.IsAlive)
+                {
+                    Application.DoEvents();
+                }
+
+                Status.Text = port.IsOpen ? "Подключен" : "Отключен";
             }
 
             return result;
