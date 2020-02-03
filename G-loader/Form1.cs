@@ -294,7 +294,7 @@ namespace G_loader
 
         private void button2_Click(object sender, EventArgs e)
         {
-            startAddress = 0x6800;
+            startAddress = 0x7000;
             maxFileSize = 2 * 1024;
             if (openAndSendFile("All files(*.*)|*.*") != DialogResult.Cancel)
             {
@@ -305,7 +305,7 @@ namespace G_loader
         private void button3_Click(object sender, EventArgs e)
         {
             startAddress = 0;
-            maxFileSize = 28 * 1024;
+            maxFileSize = 2 * 0x3BFF; // flash memory region 0x0 - 0x3bff
             if (openAndSendFile("Bin files(*.bin)|*.bin") != DialogResult.Cancel)
             {
 
